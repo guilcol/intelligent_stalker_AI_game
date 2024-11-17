@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3 uid="uid://bg5daad38vqs5"]
+
+[ext_resource type="Texture2D" uid="uid://cbecyme828kjj" path="res://art/player/stamina_under.png" id="1_ddueq"]
+[ext_resource type="Texture2D" uid="uid://b3tv15ajx3m58" path="res://art/player/stamina_over.png" id="2_t21o6"]
+
+[node name="UI" type="CanvasLayer"]
+
+[node name="stamina_bar" type="TextureProgressBar" parent="."]
+offset_left = 27.0
+offset_top = 27.0
+offset_right = 91.0
+offset_bottom = 67.0
+max_value = 50.0
+value = 50.0
+texture_under = ExtResource("1_ddueq")
+texture_progress = ExtResource("2_t21o6")
