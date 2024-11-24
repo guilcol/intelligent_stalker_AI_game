@@ -11,6 +11,9 @@ var real_direction = Vector2(0, 0)
 var direction = Vector2(0, 0)
 var speed_modifier = 1
 
+# Noise
+var noise_dissipation: float = 0.2
+
 # UI 
 var UI = null
 var stamina_bar: TextureProgressBar = null
@@ -27,14 +30,18 @@ func _physics_process(delta: float) -> void:
 		if stamina > 0.0:
 			speed_modifier = 1.65
 			stamina -= stamina_loss
+			noise_dissipation = 0.15
 		else:
 			speed_modifier = 1
+			noise_dissipation = 0.2 
 	elif speed_mod_axis < 0:
 		speed_modifier = 0.4
+		noise_dissipation = 0.35
 		if stamina < 50:
 			stamina += stamina_gain
 	else:
 		speed_modifier = 1
+		noise_dissipation = 0.2
 		if stamina < 50:
 			stamina += stamina_gain
 			
@@ -75,7 +82,29 @@ func _find_child_by_name(name: String, children):
 			return child
 	return null
 		
+
+
+
+
 func _on_player_area_area_entered(area: Area2D) -> void:
 	if area.name.substr(0, 9) == "tile_node":
 		var pos = Vector2i(area.global_position)
-		print(tile_dict[pos])
+		_manifest_noise(pos, 1)
+		
+func _manifest_noise(pos: Vector2i, ld: float):
+	if pos not in tile_dict:
+		return null
+	var tile_node = tile_dict[pos]
+	if tile_node.get_noise_value() > ld:
+		return null
+	tile_node.set_noise_value(ld)
+	var new_pos = Vector2i(pos.x + 32, pos.y)
+	_manifest_noise(new_pos, ld - noise_dissipation)
+	new_pos = Vector2i(pos.x - 32, pos.y)
+	_manifest_noise(new_pos, ld - noise_dissipation)
+	new_pos = Vector2i(pos.x, pos.y + 32)
+	_manifest_noise(new_pos, ld - noise_dissipation)
+	new_pos = Vector2i(pos.x, pos.y - 32)
+	_manifest_noise(new_pos, ld - noise_dissipation)
+	
+	
