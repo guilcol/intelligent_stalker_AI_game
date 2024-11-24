@@ -27,4 +27,9 @@ shape = SubResource("RectangleShape2D_tpjt6")
 zoom = Vector2(2, 2)
 position_smoothing_enabled = true
 
+[node name="raycast" type="RayCast2D" parent="."]
+visible = false
+collision_mask = 2
+collide_with_areas = true
+
 [connection signal="area_entered" from="player_area" to="." method="_on_player_area_area_entered"]

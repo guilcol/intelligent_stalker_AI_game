@@ -4,6 +4,7 @@ extends CharacterBody2D
 @onready var map: TileMapLayer = get_parent()
 @onready var camera: Camera2D = $camera
 @onready var world_node = get_parent().get_parent()
+@onready var cast = $raycast
 
 # Movement
 const SPEED = 120.0
@@ -12,14 +13,14 @@ var direction = Vector2(0, 0)
 var speed_modifier = 1
 
 # Noise
-var noise_dissipation: float = 0.2
+var loudness: float = 5.0
 
 # UI 
 var UI = null
 var stamina_bar: TextureProgressBar = null
-var stamina = 50.0
-var stamina_loss = 0.25
-var stamina_gain = 0.3
+var stamina: float = 50.0
+var stamina_loss: float = 0.25
+var stamina_gain: float = 0.3
 
 # Other
 var tile_dict: Dictionary = {}
@@ -28,20 +29,20 @@ func _physics_process(delta: float) -> void:
 	var speed_mod_axis = Input.get_axis("crouch", "sprint")
 	if speed_mod_axis > 0:
 		if stamina > 0.0:
+			loudness = 8.0
 			speed_modifier = 1.65
 			stamina -= stamina_loss
-			noise_dissipation = 0.15
 		else:
+			loudness = 5.0
 			speed_modifier = 1
-			noise_dissipation = 0.2 
 	elif speed_mod_axis < 0:
+		loudness = 3.0
 		speed_modifier = 0.4
-		noise_dissipation = 0.35
 		if stamina < 50:
 			stamina += stamina_gain
 	else:
 		speed_modifier = 1
-		noise_dissipation = 0.2
+		loudness = 5.0
 		if stamina < 50:
 			stamina += stamina_gain
 			
@@ -83,14 +84,36 @@ func _find_child_by_name(name: String, children):
 	return null
 		
 
-
-
-
 func _on_player_area_area_entered(area: Area2D) -> void:
 	if area.name.substr(0, 9) == "tile_node":
 		var pos = Vector2i(area.global_position)
-		_manifest_noise(pos, 1)
-		
+		_manifest_noise_2(pos)
+
+func _manifest_noise_2(pos):
+	var start_x = pos.x - (loudness * 32)
+	var start_y = pos.y - (loudness * 32)
+	var end_x = pos.x + (loudness * 32)
+	var end_y = pos.y + (loudness * 32)
+	
+	for y in range(start_y, end_y, 32):
+		for x in range(start_x, end_x, 32):
+			var curr_pos = Vector2i(x, y)
+			if curr_pos in tile_dict:
+				var dist = _get_distance_to_tile(curr_pos)
+				if dist <= 32 * loudness:
+					cast.target_position = Vector2(curr_pos) - global_position
+					cast.force_raycast_update()
+					if not cast.is_colliding():
+						tile_dict[curr_pos].set_noise_value(1 - (dist / (32 * loudness)))
+
+func _get_distance_to_tile(pos: Vector2i) -> float:
+	var x1 = int(global_position.x / 32) * 32
+	var y1 = int(global_position.y / 32) * 32
+	var x2 = pos.x - 16
+	var y2 = pos.y - 16
+	var dist = sqrt(pow(x2-x1, 2)+pow(y2-y1, 2))
+	return dist
+	
 func _manifest_noise(pos: Vector2i, ld: float):
 	if pos not in tile_dict:
 		return null
@@ -99,12 +122,14 @@ func _manifest_noise(pos: Vector2i, ld: float):
 		return null
 	tile_node.set_noise_value(ld)
 	var new_pos = Vector2i(pos.x + 32, pos.y)
-	_manifest_noise(new_pos, ld - noise_dissipation)
+	#_manifest_noise(new_pos, ld - noise_dissipation)
 	new_pos = Vector2i(pos.x - 32, pos.y)
-	_manifest_noise(new_pos, ld - noise_dissipation)
+	#_manifest_noise(new_pos, ld - noise_dissipation)
 	new_pos = Vector2i(pos.x, pos.y + 32)
-	_manifest_noise(new_pos, ld - noise_dissipation)
+	#_manifest_noise(new_pos, ld - noise_dissipation)
 	new_pos = Vector2i(pos.x, pos.y - 32)
-	_manifest_noise(new_pos, ld - noise_dissipation)
+	#_manifest_noise(new_pos, ld - noise_dissipation)
+	
+
 	
 	
