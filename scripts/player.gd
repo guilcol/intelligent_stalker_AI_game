@@ -5,6 +5,13 @@ extends CharacterBody2D
 @onready var camera: Camera2D = $camera
 @onready var world_node = get_parent().get_parent()
 @onready var cast = $raycast
+@onready var walking_sound = $walking_sound
+@onready var crouching_sound = $crouching_sound
+@onready var sprinting_sound = $sprinting_sound
+
+# Preloads
+@export var ns_scene = preload("res://scenes/noise_source.tscn")
+var ns_player: Node2D = null
 
 # Movement
 const SPEED = 120.0
@@ -22,47 +29,91 @@ var stamina: float = 50.0
 var stamina_loss: float = 0.25
 var stamina_gain: float = 0.3
 
-# Other
-var tile_dict: Dictionary = {}
-
+func _ready() -> void:
+	ns_player = ns_scene.instantiate()
+	ns_player.name = "noise_source_player"
+	ns_player.set_noise_type("steps")
+	add_child(ns_player)
+	_set_camera_limits()
+	_get_UI_components()
+	
 func _physics_process(delta: float) -> void:
+	
 	var speed_mod_axis = Input.get_axis("crouch", "sprint")
-	if speed_mod_axis > 0:
-		if stamina > 0.0:
+	if speed_mod_axis > 0: # Sprinting
+		if stamina > 0:
+			isolate_sound("s")
 			loudness = 8.0
 			speed_modifier = 1.65
 			stamina -= stamina_loss
 		else:
+			isolate_sound("w")
 			loudness = 5.0
 			speed_modifier = 1
-	elif speed_mod_axis < 0:
+	elif speed_mod_axis < 0: # Crouching
+		isolate_sound("c")
 		loudness = 3.0
 		speed_modifier = 0.4
-		if stamina < 50:
-			stamina += stamina_gain
-	else:
-		speed_modifier = 1
+		stamina = min(50, stamina + stamina_gain)
+	else: # Normal movement
+		isolate_sound("w")
 		loudness = 5.0
-		if stamina < 50:
-			stamina += stamina_gain
-			
+		speed_modifier = 1
+		stamina = min(50, stamina + stamina_gain)
+	if stamina < 0.5 and speed_mod_axis > 0:
+		speed_modifier = 1
+		loudness = 5.0	
 	stamina_bar.value = int(stamina)
 	
-	real_direction = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	real_direction = _get_direction_vector()
 	if real_direction != Vector2(0, 0):
 		direction = lerp(direction, real_direction * speed_modifier, 0.1)
 	else:
 		direction = lerp(direction, Vector2(0, 0), 0.3)
+		walking_sound.stop()
+		crouching_sound.stop()
+		sprinting_sound.stop()
 	if direction:
 		velocity = direction * SPEED
 	else:
 		velocity = Vector2(0, 0)
+	var real_speed = clamp(velocity.length() / (SPEED * 1.65), 0.0, 1.0)
+	_update_noise(real_speed)
 	move_and_slide()
+
+func _get_direction_vector() -> Vector2:
+	var wasd_vector = Input.get_vector("left", "right", "up", "down")
+	var arrows_vector = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if not wasd_vector and arrows_vector:
+		return arrows_vector
+	if not arrows_vector and wasd_vector:
+		return wasd_vector
+	return ((wasd_vector + arrows_vector) / 2).normalized()
 	
-func _ready() -> void:
-	_set_camera_limits()
-	_get_UI_components()
-	tile_dict = world_node.get_tile_dict()
+func _update_noise(val: float):
+	var loudest = 280
+	var curr_loudness = loudest * val
+	ns_player.set_radius(curr_loudness)
+
+func collect_item(item: Node2D):
+	pass
+	
+func isolate_sound(type: String):
+	if type == "w":
+		sprinting_sound.stop()
+		crouching_sound.stop()
+		if not walking_sound.playing:
+			walking_sound.play()
+	elif type == "c":
+		sprinting_sound.stop()
+		walking_sound.stop()
+		if not crouching_sound.playing:
+			crouching_sound.play()
+	else:
+		walking_sound.stop()
+		crouching_sound.stop()
+		if not sprinting_sound.playing:
+			sprinting_sound.play()
 
 func _get_UI_components():
 	UI = _find_child_by_name("UI", world_node.get_children())
@@ -83,29 +134,6 @@ func _find_child_by_name(name: String, children):
 			return child
 	return null
 		
-
-func _on_player_area_area_entered(area: Area2D) -> void:
-	if area.name.substr(0, 9) == "tile_node":
-		var pos = Vector2i(area.global_position)
-		_manifest_noise_2(pos)
-
-func _manifest_noise_2(pos):
-	var start_x = pos.x - (loudness * 32)
-	var start_y = pos.y - (loudness * 32)
-	var end_x = pos.x + (loudness * 32)
-	var end_y = pos.y + (loudness * 32)
-	
-	for y in range(start_y, end_y, 32):
-		for x in range(start_x, end_x, 32):
-			var curr_pos = Vector2i(x, y)
-			if curr_pos in tile_dict:
-				var dist = _get_distance_to_tile(curr_pos)
-				if dist <= 32 * loudness:
-					cast.target_position = Vector2(curr_pos) - global_position
-					cast.force_raycast_update()
-					if not cast.is_colliding():
-						tile_dict[curr_pos].set_noise_value(1 - (dist / (32 * loudness)))
-
 func _get_distance_to_tile(pos: Vector2i) -> float:
 	var x1 = int(global_position.x / 32) * 32
 	var y1 = int(global_position.y / 32) * 32
@@ -113,23 +141,3 @@ func _get_distance_to_tile(pos: Vector2i) -> float:
 	var y2 = pos.y - 16
 	var dist = sqrt(pow(x2-x1, 2)+pow(y2-y1, 2))
 	return dist
-	
-func _manifest_noise(pos: Vector2i, ld: float):
-	if pos not in tile_dict:
-		return null
-	var tile_node = tile_dict[pos]
-	if tile_node.get_noise_value() > ld:
-		return null
-	tile_node.set_noise_value(ld)
-	var new_pos = Vector2i(pos.x + 32, pos.y)
-	#_manifest_noise(new_pos, ld - noise_dissipation)
-	new_pos = Vector2i(pos.x - 32, pos.y)
-	#_manifest_noise(new_pos, ld - noise_dissipation)
-	new_pos = Vector2i(pos.x, pos.y + 32)
-	#_manifest_noise(new_pos, ld - noise_dissipation)
-	new_pos = Vector2i(pos.x, pos.y - 32)
-	#_manifest_noise(new_pos, ld - noise_dissipation)
-	
-
-	
-	
